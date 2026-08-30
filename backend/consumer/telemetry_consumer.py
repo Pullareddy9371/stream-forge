@@ -1,8 +1,8 @@
 import json
 
 from confluent_kafka import Consumer, KafkaException
-
 from validator import validate_telemetry
+from processor import process_telemetry
 
 
 KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
@@ -45,15 +45,16 @@ def process_message(message):
         )
         return
 
+    result = process_telemetry(data)
+
     print(
         f"[VALID] "
-        f"truck_id={data['truck_id']} | "
-        f"speed={data['speed_kmph']} km/h | "
-        f"temperature={data['temperature']} C | "
-        f"fuel={data['fuel_level']}%"
+        f"truck_id={result['truck_id']} | "
+        f"speed={result['speed_status']} | "
+        f"temperature={result['temperature_status']} | "
+        f"fuel={result['fuel_status']} | "
+        f"overall={result['overall_status']}"
     )
-
-
 def run():
     """Consume truck telemetry from Kafka."""
 
