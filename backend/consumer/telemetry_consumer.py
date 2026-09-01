@@ -3,7 +3,9 @@ import json
 from confluent_kafka import Consumer, KafkaException
 from validator import validate_telemetry
 from processor import process_telemetry
+from logger_config import setup_logger
 
+logger = setup_logger()
 
 KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
 KAFKA_TOPIC = "truck-telemetry"
@@ -24,28 +26,54 @@ def create_consumer():
 
 
 def process_message(message):
-    """Decode and validate a Kafka message."""
-
     try:
-        data = json.loads(
-            message.value().decode("utf-8")
+        raw_value = message.value()
+
+        data = json.loads(raw_value)
+
+    except json.JSONDecodeError as error:
+        logger.error(
+            "Invalid JSON received | error=%s | message=%s",
+            error,
+            raw_value,
+        )
+        return
+    is_valid, error = validate_telemetry(data)
+    if not is_valid:
+        logger.warning(
+            "Telemetry validation failed | truck_id=%s | reason=%s",
+             data.get("truck_id", "UNKNOWN"),
+             error,
         )
 
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
-        print(f"[INVALID] Invalid JSON | error={error}")
-        return
-
-    is_valid, error = validate_telemetry(data)
-
-    if not is_valid:
         print(
             f"[INVALID] "
             f"truck_id={data.get('truck_id', 'UNKNOWN')} | "
             f"reason={error}"
         )
+
         return
 
-    result = process_telemetry(data)
+    try:
+        result = process_telemetry(data)
+
+    except Exception as error:
+        logger.exception(
+            "Telemetry processing failed | truck_id=%s | error=%s",
+            data.get("truck_id", "UNKNOWN"),
+            error,
+        )
+        return
+
+    logger.info(
+        "Telemetry processed | "
+        "truck_id=%s | speed=%s | temperature=%s | fuel=%s | overall=%s",
+        result["truck_id"],
+        result["speed_status"],
+        result["temperature_status"],
+        result["fuel_status"],
+        result["overall_status"],
+    )
 
     print(
         f"[VALID] "
