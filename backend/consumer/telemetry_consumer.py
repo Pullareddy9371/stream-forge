@@ -4,6 +4,27 @@ from confluent_kafka import Consumer, KafkaException
 from validator import validate_telemetry
 from processor import process_telemetry
 from logger_config import setup_logger
+class ConsumerStats:
+    def __init__(self):
+        self.processed = 0
+        self.invalid_json = 0
+        self.validation_failed = 0
+        self.errors = 0
+
+    def print_summary(self):
+        total = (
+            self.processed
+            + self.invalid_json
+            + self.validation_failed
+        )
+
+        print("\n========== Consumer Summary ==========")
+        print(f"Total messages:      {total}")
+        print(f"Processed:           {self.processed}")
+        print(f"Invalid JSON:        {self.invalid_json}")
+        print(f"Validation failed:   {self.validation_failed}")
+        print(f"Processing errors:   {self.errors}")
+        print("======================================")
 
 logger = setup_logger()
 
@@ -24,26 +45,30 @@ def create_consumer():
 
     return Consumer(config)
 
-
-def process_message(message):
+def process_message(message, stats):
     try:
         raw_value = message.value()
-
         data = json.loads(raw_value)
 
     except json.JSONDecodeError as error:
+        stats.invalid_json += 1
+
         logger.error(
             "Invalid JSON received | error=%s | message=%s",
             error,
             raw_value,
         )
         return
+
     is_valid, error = validate_telemetry(data)
+
     if not is_valid:
+        stats.validation_failed += 1
+
         logger.warning(
             "Telemetry validation failed | truck_id=%s | reason=%s",
-             data.get("truck_id", "UNKNOWN"),
-             error,
+            data.get("truck_id", "UNKNOWN"),
+            error,
         )
 
         print(
@@ -58,12 +83,16 @@ def process_message(message):
         result = process_telemetry(data)
 
     except Exception as error:
+        stats.errors += 1
+
         logger.exception(
             "Telemetry processing failed | truck_id=%s | error=%s",
             data.get("truck_id", "UNKNOWN"),
             error,
         )
         return
+
+    stats.processed += 1
 
     logger.info(
         "Telemetry processed | "
@@ -83,6 +112,7 @@ def process_message(message):
         f"fuel={result['fuel_status']} | "
         f"overall={result['overall_status']}"
     )
+
 def run():
     """Consume truck telemetry from Kafka."""
 
@@ -97,6 +127,8 @@ def run():
     print(f"Group: {KAFKA_GROUP_ID}")
     print("--------------------------------")
 
+    stats = ConsumerStats()
+
     try:
         while True:
 
@@ -108,14 +140,14 @@ def run():
             if message.error():
                 raise KafkaException(message.error())
 
-            process_message(message)
+            process_message(message, stats)
 
     except KeyboardInterrupt:
         print("\nStopping StreamForge consumer...")
-
     finally:
         consumer.close()
         print("Consumer stopped.")
+        stats.print_summary()
 
 
 if __name__ == "__main__":
