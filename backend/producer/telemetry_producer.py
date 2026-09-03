@@ -3,7 +3,7 @@ import random
 import time
 from datetime import datetime, timezone
 
-from confluent_kafka import Producer
+from confluent_kafka import Producer, KafkaException
 
 from config import (
     KAFKA_BOOTSTRAP_SERVERS,
@@ -13,18 +13,42 @@ from config import (
 )
 
 
+class ProducerStats:
+    """Track producer delivery statistics."""
+
+    def __init__(self):
+        self.sent = 0
+        self.delivered = 0
+        self.failed = 0
+
+    def print_summary(self):
+        print("\n========== Producer Summary ==========")
+        print(f"Messages queued:     {self.sent}")
+        print(f"Messages delivered:  {self.delivered}")
+        print(f"Delivery failures:   {self.failed}")
+        print("=======================================")
+
+
+stats = ProducerStats()
+
+
 def delivery_report(err, message):
     """Called by Kafka after a message is delivered or fails."""
 
     if err is not None:
+        stats.failed += 1
+
         print(
-            f"Delivery failed for truck event: {err}"
+            f"Delivery failed | "
+            f"error={err}"
         )
         return
 
+    stats.delivered += 1
+
     print(
         f"Delivered truck event | "
-        f"truck_id={message.key().decode()} | "
+        f"truck_id={message.key().decode('utf-8')} | "
         f"partition={message.partition()} | "
         f"offset={message.offset()}"
     )
@@ -75,9 +99,7 @@ def run():
     print(f"Kafka: {KAFKA_BOOTSTRAP_SERVERS}")
     print(f"Topic: {KAFKA_TOPIC}")
     print(f"Trucks: {TRUCK_COUNT}")
-    print(
-        f"Interval: {SEND_INTERVAL_SECONDS} seconds"
-    )
+    print(f"Interval: {SEND_INTERVAL_SECONDS} seconds")
     print("--------------------------------")
 
     try:
@@ -87,26 +109,33 @@ def run():
 
             for truck_number in range(1, TRUCK_COUNT + 1):
 
-                truck_id = (
-                    f"TRUCK-{truck_number:05d}"
-                )
+                truck_id = f"TRUCK-{truck_number:05d}"
 
                 telemetry = generate_telemetry(
                     truck_id
                 )
 
-                producer.produce(
-                    topic=KAFKA_TOPIC,
-                    key=truck_id.encode("utf-8"),
-                    value=json.dumps(
-                        telemetry
-                    ).encode("utf-8"),
-                    callback=delivery_report,
-                )
+                try:
+                    producer.produce(
+                        topic=KAFKA_TOPIC,
+                        key=truck_id.encode("utf-8"),
+                        value=json.dumps(
+                            telemetry
+                        ).encode("utf-8"),
+                        callback=delivery_report,
+                    )
 
-                events_sent += 1
+                    stats.sent += 1
+                    events_sent += 1
 
-                # Process delivery callbacks.
+                except BufferError:
+                    print(
+                        "Producer queue is full. "
+                        "Waiting for Kafka..."
+                    )
+
+                    producer.poll(1)
+
                 producer.poll(0)
 
             producer.flush()
@@ -128,11 +157,18 @@ def run():
             "\nStopping StreamForge producer..."
         )
 
+    except KafkaException as error:
+
+        print(
+            f"\nKafka error: {error}"
+        )
+
     finally:
 
         producer.flush()
 
         print("Producer stopped.")
+        stats.print_summary()
 
 
 if __name__ == "__main__":
