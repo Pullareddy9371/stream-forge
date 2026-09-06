@@ -41,3 +41,11 @@ def build_flow():
 
 
 flow = build_flow()
+def temperature_filter(event):
+    """Filter telemetry events with temperature <= 0."""
+    temperature = event.get("temperature")
+
+    if temperature is None:
+        return False
+
+    return temperature > 0
