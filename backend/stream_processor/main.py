@@ -1,8 +1,14 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 from bytewax.dataflow import Dataflow
 from bytewax import operators as op
 from bytewax.connectors.kafka import KafkaSource
+from bytewax.operators.windowing import (
+    EventClock,
+    TumblingWindower,
+    collect_window,
+)
 
 from .config import (
     KAFKA_BOOTSTRAP_SERVERS,
@@ -29,7 +35,9 @@ def decode_kafka_message(message):
     try:
         return json.loads(value)
     except (json.JSONDecodeError, UnicodeDecodeError):
-        print(f"[INVALID MESSAGE] Skipping non-JSON message: {value}")
+        print(
+            f"[INVALID MESSAGE] Skipping non-JSON message: {value}"
+        )
         return None
 
 
@@ -60,6 +68,39 @@ def map_telemetry(event):
         )
 
     return transformed_event
+
+
+def get_event_timestamp(event):
+    """Convert the telemetry timestamp into a UTC datetime."""
+
+    timestamp = event.get("timestamp")
+
+    if not timestamp:
+        return datetime.now(timezone.utc)
+
+    parsed_timestamp = datetime.fromisoformat(
+        timestamp.replace("Z", "+00:00")
+    )
+
+    if parsed_timestamp.tzinfo is None:
+        parsed_timestamp = parsed_timestamp.replace(
+            tzinfo=timezone.utc
+        )
+
+    return parsed_timestamp.astimezone(timezone.utc)
+
+
+def format_window_output(item):
+    """Format collected window data for readable output."""
+
+    truck_id, (window_id, events) = item
+
+    return {
+        "truck_id": truck_id,
+        "window_id": window_id,
+        "event_count": len(events),
+        "events": events,
+    }
 
 
 def build_flow():
@@ -98,10 +139,46 @@ def build_flow():
         map_telemetry,
     )
 
-    op.inspect(
-        "print-events",
+    keyed_stream = op.key_on(
+        "key-by-truck",
         mapped_stream,
-        print_event,
+        lambda event: event["truck_id"],
+    )
+
+    event_clock = EventClock(
+        ts_getter=get_event_timestamp,
+        wait_for_system_duration=timedelta(seconds=0),
+    )
+
+    windower = TumblingWindower(
+        length=timedelta(minutes=5),
+        align_to=datetime(
+            2026,
+            1,
+            1,
+            0,
+            0,
+            0,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    windowed_stream = collect_window(
+        "collect-5-minute-window",
+        keyed_stream,
+        event_clock,
+        windower,
+    )
+
+    formatted_stream = op.map(
+        "format-window-output",
+        windowed_stream.down,
+        format_window_output,
+    )
+
+    op.inspect(
+        "print-windowed-events",
+        formatted_stream,
     )
 
     return flow
