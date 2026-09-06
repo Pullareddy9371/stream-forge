@@ -101,6 +101,29 @@ def format_window_output(item):
         "event_count": len(events),
         "events": events,
     }
+def calculate_window_average(item):
+    """Calculate average temperature for a truck within a window."""
+
+    truck_id, (window_id, events) = item
+
+    temperatures = [
+        event["temperature"]
+        for event in events
+        if event.get("temperature") is not None
+    ]
+
+    average_temperature = (
+        sum(temperatures) / len(temperatures)
+        if temperatures
+        else 0.0
+    )
+
+    return {
+        "truck_id": truck_id,
+        "window_id": window_id,
+        "event_count": len(events),
+        "average_temperature": round(average_temperature, 2),
+    }
 
 
 def build_flow():
@@ -170,17 +193,19 @@ def build_flow():
         windower,
     )
 
-    formatted_stream = op.map(
-        "format-window-output",
-        windowed_stream.down,
-        format_window_output,
+    aggregated_stream = op.map(
+    "calculate-window-average",
+    windowed_stream.down,
+    calculate_window_average,
     )
 
     op.inspect(
-        "print-windowed-events",
-        formatted_stream,
+    "print-windowed-events",
+    aggregated_stream,
+
     )
 
+    
     return flow
 
 
