@@ -170,7 +170,7 @@ def build_flow():
 
     event_clock = EventClock(
         ts_getter=get_event_timestamp,
-        wait_for_system_duration=timedelta(seconds=0),
+        wait_for_system_duration=timedelta(seconds=30),
     )
 
     windower = TumblingWindower(
@@ -192,8 +192,13 @@ def build_flow():
         event_clock,
         windower,
     )
+    op.inspect(
+    "print-late-events",
+    windowed_stream.late,
+    print_late_event,
+    )
 
-    aggregated_stream = op.map(
+    formatted_stream = op.map(
     "calculate-window-average",
     windowed_stream.down,
     calculate_window_average,
@@ -201,12 +206,14 @@ def build_flow():
 
     op.inspect(
     "print-windowed-events",
-    aggregated_stream,
+    formatted_stream,
 
     )
 
     
     return flow
 
-
+def print_late_event(step_id, event):
+    """Log telemetry events that arrive after the window watermark."""
+    print(f"[LATE EVENT] {event}")
 flow = build_flow()
