@@ -1,41 +1,43 @@
-import json
-
-from bytewax import operators as op
 from bytewax.dataflow import Dataflow
+from bytewax import operators as op
+from bytewax.connectors.kafka import KafkaSource
 
-from config import (
+from .config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_INPUT_TOPIC,
-    KAFKA_GROUP_ID,
 )
 
 
-flow = Dataflow("streamforge")
-
-# Day 9:
-# Stream processing foundation will be implemented here.
-#
-# Day 10:
-# Kafka Consume stage
-#
-# Day 11:
-# Temperature Filter stage
-#
-# Day 12:
-# Map stage
-#
-# Day 13:
-# Five-minute event-time window
-#
-# Day 14:
-# Per-truck temperature aggregation
+def print_event(step_id, event):
+    """Print events received from Kafka."""
+    print(f"[KAFKA EVENT] {event}")
 
 
-if __name__ == "__main__":
-    print("StreamForge Stream Processor")
-    print("--------------------------------")
-    print(f"Kafka: {KAFKA_BOOTSTRAP_SERVERS}")
-    print(f"Input topic: {KAFKA_INPUT_TOPIC}")
-    print(f"Consumer group: {KAFKA_GROUP_ID}")
-    print("--------------------------------")
-    print("Stream processing application initialized.")
+def build_flow():
+    """Build the StreamForge Kafka consumption flow."""
+
+    flow = Dataflow("streamforge")
+
+    source = KafkaSource(
+        brokers=[KAFKA_BOOTSTRAP_SERVERS],
+        topics=[KAFKA_INPUT_TOPIC],
+        tail=True,
+        starting_offset=-2,
+    )
+
+    stream = op.input(
+        "kafka-input",
+        flow,
+        source,
+    )
+
+    op.inspect(
+        "print-events",
+        stream,
+        print_event,
+    )
+
+    return flow
+
+
+flow = build_flow()
