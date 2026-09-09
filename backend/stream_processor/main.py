@@ -1,133 +1,37 @@
 import json
-from datetime import datetime, timedelta, timezone
 
-from bytewax.dataflow import Dataflow
 from bytewax import operators as op
 from bytewax.connectors.kafka import KafkaSource
-from bytewax.operators.windowing import (
-    EventClock,
-    TumblingWindower,
-    collect_window,
-)
+from bytewax.dataflow import Dataflow
 
 from .config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_INPUT_TOPIC,
 )
+from .state import update_temperature_state
 
 
-def print_event(step_id, event):
-    """Print processed telemetry events."""
-    print(f"[PROCESSED EVENT] {event}")
-
-
-def decode_kafka_message(message):
-    """Decode a KafkaSourceMessage into a telemetry dictionary."""
-
-    value = message.value
-
-    if value is None:
-        return None
-
-    if isinstance(value, bytes):
-        value = value.decode("utf-8")
-
+def parse_event(event):
+    """Convert Kafka event into a Python dictionary."""
     try:
-        return json.loads(value)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        print(
-            f"[INVALID MESSAGE] Skipping non-JSON message: {value}"
-        )
+        return json.loads(event.value)
+    except (json.JSONDecodeError, TypeError):
         return None
 
 
-def temperature_filter(event):
-    """Allow only telemetry events with temperature greater than 0."""
-
-    if event is None:
-        return False
-
-    temperature = event.get("temperature")
-
-    if temperature is None:
-        return False
-
-    return temperature > 0
-
-
-def map_telemetry(event):
-    """Transform valid telemetry events into an enriched event."""
-
-    transformed_event = dict(event)
-
-    temperature = transformed_event.get("temperature")
-
-    if temperature is not None:
-        transformed_event["temperature_status"] = (
-            "normal" if temperature <= 40 else "high"
-        )
-
-    return transformed_event
-
-
-def get_event_timestamp(event):
-    """Convert the telemetry timestamp into a UTC datetime."""
-
-    timestamp = event.get("timestamp")
-
-    if not timestamp:
-        return datetime.now(timezone.utc)
-
-    parsed_timestamp = datetime.fromisoformat(
-        timestamp.replace("Z", "+00:00")
+def print_result(step_id, event):
+    """Print stateful temperature results."""
+    print(
+        f"[STATE] "
+        f"truck_id={event['truck_id']} | "
+        f"temperature={event['temperature']} | "
+        f"average={event['average_temperature']} | "
+        f"count={event['count']}"
     )
-
-    if parsed_timestamp.tzinfo is None:
-        parsed_timestamp = parsed_timestamp.replace(
-            tzinfo=timezone.utc
-        )
-
-    return parsed_timestamp.astimezone(timezone.utc)
-
-
-def format_window_output(item):
-    """Format collected window data for readable output."""
-
-    truck_id, (window_id, events) = item
-
-    return {
-        "truck_id": truck_id,
-        "window_id": window_id,
-        "event_count": len(events),
-        "events": events,
-    }
-def calculate_window_average(item):
-    """Calculate average temperature for a truck within a window."""
-
-    truck_id, (window_id, events) = item
-
-    temperatures = [
-        event["temperature"]
-        for event in events
-        if event.get("temperature") is not None
-    ]
-
-    average_temperature = (
-        sum(temperatures) / len(temperatures)
-        if temperatures
-        else 0.0
-    )
-
-    return {
-        "truck_id": truck_id,
-        "window_id": window_id,
-        "event_count": len(events),
-        "average_temperature": round(average_temperature, 2),
-    }
 
 
 def build_flow():
-    """Build the StreamForge Kafka processing flow."""
+    """Build the StreamForge stateful processing flow."""
 
     flow = Dataflow("streamforge")
 
@@ -144,76 +48,43 @@ def build_flow():
         source,
     )
 
-    decoded_stream = op.map(
-        "decode-json",
+    events = op.map(
+        "parse-event",
         stream,
-        decode_kafka_message,
+        parse_event,
     )
 
-    filtered_stream = op.filter(
-        "temperature-filter",
-        decoded_stream,
-        temperature_filter,
+    valid_events = op.filter(
+        "valid-events",
+        events,
+        lambda event: event is not None and "truck_id" in event,
     )
 
-    mapped_stream = op.map(
-        "telemetry-map",
-        filtered_stream,
-        map_telemetry,
-    )
-
-    keyed_stream = op.key_on(
-        "key-by-truck",
-        mapped_stream,
+    keyed_events = op.key_on(
+        "truck-key",
+        valid_events,
         lambda event: event["truck_id"],
     )
 
-    event_clock = EventClock(
-        ts_getter=get_event_timestamp,
-        wait_for_system_duration=timedelta(seconds=30),
+    stateful_events = op.stateful_map(
+        "truck-temperature-state",
+        keyed_events,
+        update_temperature_state,
     )
 
-    windower = TumblingWindower(
-        length=timedelta(minutes=5),
-        align_to=datetime(
-            2026,
-            1,
-            1,
-            0,
-            0,
-            0,
-            tzinfo=timezone.utc,
-        ),
-    )
-
-    windowed_stream = collect_window(
-        "collect-5-minute-window",
-        keyed_stream,
-        event_clock,
-        windower,
-    )
-    op.inspect(
-    "print-late-events",
-    windowed_stream.late,
-    print_late_event,
-    )
-
-    formatted_stream = op.map(
-    "calculate-window-average",
-    windowed_stream.down,
-    calculate_window_average,
+    results = op.map(
+        "state-result",
+        stateful_events,
+        lambda item: item[1],
     )
 
     op.inspect(
-    "print-windowed-events",
-    formatted_stream,
-
+        "print-state",
+        results,
+        print_result,
     )
 
-    
     return flow
 
-def print_late_event(step_id, event):
-    """Log telemetry events that arrive after the window watermark."""
-    print(f"[LATE EVENT] {event}")
+
 flow = build_flow()
