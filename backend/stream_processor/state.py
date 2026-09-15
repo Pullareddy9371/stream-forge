@@ -26,9 +26,18 @@ class TruckTemperatureState:
         return self.average
 
 
-# Persistent RocksDB store shared by the stream processor.
-state_store = RocksDBStateStore()
+# RocksDB is opened lazily when the first event is processed.
+_state_store = None
 
+
+def get_state_store() -> RocksDBStateStore:
+    """Create the RocksDB store only when it is first needed."""
+    global _state_store
+
+    if _state_store is None:
+        _state_store = RocksDBStateStore()
+
+    return _state_store
 
 def update_temperature_state(
     state: Optional[TruckTemperatureState],
@@ -39,6 +48,7 @@ def update_temperature_state(
     """
 
     truck_id = event["truck_id"]
+    state_store = get_state_store()
 
     # If Bytewax has no in-memory state, try to restore it from RocksDB.
     if state is None:

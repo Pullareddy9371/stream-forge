@@ -1,12 +1,32 @@
+import os
 from pathlib import Path
 
 from rocksdict import Rdict
 
 
+def get_state_db_path() -> str:
+    """
+    Return a process-specific RocksDB path.
+
+    Process 0 keeps using the existing Day 19 database so
+    previously persisted state remains available.
+    """
+
+    process_id = os.getenv("BYTEWAX_PROCESS_ID", "0")
+
+    if process_id == "0":
+        return "backend/stream_processor/state_db"
+
+    return f"backend/stream_processor/state_db_process_{process_id}"
+
+
 class RocksDBStateStore:
     """Persistent key-value state store backed by RocksDB."""
 
-    def __init__(self, db_path: str = "backend/stream_processor/state_db"):
+    def __init__(self, db_path: str | None = None):
+        if db_path is None:
+            db_path = get_state_db_path()
+
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
