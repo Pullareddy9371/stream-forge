@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+from .rocksdb_store import RocksDBStateStore
+
 
 class TruckTemperatureState:
     """Maintain temperature aggregation state for one truck."""
@@ -24,24 +26,48 @@ class TruckTemperatureState:
         return self.average
 
 
+# Persistent RocksDB store shared by the stream processor.
+state_store = RocksDBStateStore()
+
+
 def update_temperature_state(
     state: Optional[TruckTemperatureState],
     event: dict,
 ) -> Tuple[TruckTemperatureState, dict]:
     """
-    Update temperature state for one truck.
-
-    Bytewax passes the previous state for the truck.
+    Update per-truck temperature state and persist it in RocksDB.
     """
 
+    truck_id = event["truck_id"]
+
+    # If Bytewax has no in-memory state, try to restore it from RocksDB.
     if state is None:
-        state = TruckTemperatureState()
+        saved_state = state_store.get(truck_id)
+
+        if saved_state is not None:
+            state = TruckTemperatureState(
+                total=float(saved_state["total"]),
+                count=int(saved_state["count"]),
+            )
+        else:
+            state = TruckTemperatureState()
 
     temperature = float(event["temperature"])
+
     average = state.update(temperature)
 
+    # Persist the latest state in RocksDB.
+    state_store.put(
+        truck_id,
+        {
+            "total": state.total,
+            "count": state.count,
+            "average": state.average,
+        },
+    )
+
     result = {
-        "truck_id": event["truck_id"],
+        "truck_id": truck_id,
         "timestamp": event["timestamp"],
         "temperature": temperature,
         "average_temperature": round(average, 2),

@@ -8,3 +8,4 @@ dist/
 logs/
 *.log
 backend/stream_processor/recovery/
+backend/stream_processor/state_db/
