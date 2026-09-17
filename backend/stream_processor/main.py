@@ -1,5 +1,5 @@
 import json
-
+from datetime import datetime, timezone
 from bytewax import operators as op
 from bytewax.connectors.kafka import KafkaSource
 from bytewax.dataflow import Dataflow
@@ -17,7 +17,67 @@ def parse_event(event):
         return json.loads(event.value)
     except (json.JSONDecodeError, TypeError):
         return None
+def get_event_timestamp(event):
+    """Parse the telemetry timestamp into a timezone-aware datetime."""
+    timestamp = event.get("timestamp")
 
+    if timestamp is None:
+        return datetime.now(timezone.utc)
+
+    if timestamp.endswith("Z"):
+        timestamp = timestamp[:-1] + "+00:00"
+
+    parsed = datetime.fromisoformat(timestamp)
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
+
+def temperature_filter(event):
+    """Allow only telemetry events with temperature greater than 0."""
+    return event is not None and event.get("temperature", 0) > 0
+
+
+def map_telemetry(event):
+    """Add temperature status while preserving existing telemetry fields."""
+    if event is None:
+        return None
+
+    result = event.copy()
+    temperature = result.get("temperature")
+
+    if temperature is not None and temperature >= 40:
+        result["temperature_status"] = "high"
+    else:
+        result["temperature_status"] = "normal"
+
+    return result
+
+
+def calculate_window_average(item):
+    """Calculate average temperature for a windowed telemetry item."""
+    truck_id, window_data = item
+    window_id, events = window_data
+
+    temperatures = [
+        event["temperature"]
+        for event in events
+        if event.get("temperature") is not None
+    ]
+
+    if temperatures:
+        average_temperature = sum(temperatures) / len(temperatures)
+    else:
+        average_temperature = 0.0
+
+    return {
+        "truck_id": truck_id,
+        "window_id": window_id,
+        "event_count": len(events),
+        "average_temperature": average_temperature,
+    }
 
 def print_result(step_id, event):
     """Print stateful temperature results."""
