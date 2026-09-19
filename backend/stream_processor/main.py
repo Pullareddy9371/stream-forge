@@ -1,13 +1,22 @@
 import json
+import time
 from datetime import datetime, timezone
 from bytewax import operators as op
 from bytewax.connectors.kafka import KafkaSource
 from bytewax.dataflow import Dataflow
-
+from .metrics_server import start_metrics_server
 from .config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_INPUT_TOPIC,
 )
+from .metrics import (
+    EVENTS_PROCESSED,
+    INVALID_EVENTS,
+    PROCESSING_ERRORS,
+    ACTIVE_WORKERS,
+    PROCESSING_LATENCY,
+)
+
 from .state import update_temperature_state
 
 
@@ -16,6 +25,7 @@ def parse_event(event):
     try:
         return json.loads(event.value)
     except (json.JSONDecodeError, TypeError):
+        INVALID_EVENTS.inc()
         return None
 def get_event_timestamp(event):
     """Parse the telemetry timestamp into a timezone-aware datetime."""
@@ -88,13 +98,31 @@ def print_result(step_id, event):
         f"average={event['average_temperature']} | "
         f"count={event['count']}"
     )
+def instrumented_update_temperature_state(state, value):
+    """Update state while recording Prometheus metrics."""
+    start_time = time.perf_counter()
 
+    try:
+        result = update_temperature_state(state, value)
 
+        EVENTS_PROCESSED.inc()
+
+        return result
+
+    except Exception:
+        PROCESSING_ERRORS.inc()
+        raise
+
+    finally:
+        PROCESSING_LATENCY.observe(time.perf_counter() - start_time)
+     
 def build_flow():
     """Build the StreamForge stateful processing flow."""
-
+    ACTIVE_WORKERS.set(1)
     flow = Dataflow("streamforge")
 
+    start_metrics_server(8000)
+    ACTIVE_WORKERS.set(1)
     source = KafkaSource(
         brokers=[KAFKA_BOOTSTRAP_SERVERS],
         topics=[KAFKA_INPUT_TOPIC],
@@ -129,7 +157,7 @@ def build_flow():
     stateful_events = op.stateful_map(
         "truck-temperature-state",
         keyed_events,
-        update_temperature_state,
+        instrumented_update_temperature_state,
     )
 
     results = op.map(
@@ -145,6 +173,7 @@ def build_flow():
     )
 
     return flow
+
 
 
 flow = build_flow()
