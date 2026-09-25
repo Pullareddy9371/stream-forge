@@ -5,3 +5,9 @@ __pycache__/
 .env
 node_modules/
 dist/
+logs/
+*.log
+backend/stream_processor/recovery/
+backend/stream_processor/state_db/
+# Bytewax Day 20 runtime recovery
+backend/stream_processor/recovery_day20/
