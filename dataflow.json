@@ -1,0 +1,537 @@
+{
+  "typ": "RenderedDataflow",
+  "flow_id": "streamforge",
+  "substeps": [
+    {
+      "typ": "RenderedOperator",
+      "op_type": "input",
+      "step_name": "kafka-input",
+      "step_id": "streamforge.kafka-input",
+      "inp_ports": [],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.kafka-input.down",
+          "from_port_ids": [],
+          "from_stream_ids": []
+        }
+      ],
+      "substeps": []
+    },
+    {
+      "typ": "RenderedOperator",
+      "op_type": "map",
+      "step_name": "parse-event",
+      "step_id": "streamforge.parse-event",
+      "inp_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "up",
+          "port_id": "streamforge.parse-event.up",
+          "from_port_ids": [
+            "streamforge.kafka-input.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.kafka-input.down"
+          ]
+        }
+      ],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.parse-event.down",
+          "from_port_ids": [
+            "streamforge.parse-event.flat_map_batch.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.parse-event.flat_map_batch.down"
+          ]
+        }
+      ],
+      "substeps": [
+        {
+          "typ": "RenderedOperator",
+          "op_type": "flat_map_batch",
+          "step_name": "flat_map_batch",
+          "step_id": "streamforge.parse-event.flat_map_batch",
+          "inp_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "up",
+              "port_id": "streamforge.parse-event.flat_map_batch.up",
+              "from_port_ids": [
+                "streamforge.parse-event.up"
+              ],
+              "from_stream_ids": [
+                "streamforge.kafka-input.down"
+              ]
+            }
+          ],
+          "out_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "down",
+              "port_id": "streamforge.parse-event.flat_map_batch.down",
+              "from_port_ids": [],
+              "from_stream_ids": []
+            }
+          ],
+          "substeps": []
+        }
+      ]
+    },
+    {
+      "typ": "RenderedOperator",
+      "op_type": "filter",
+      "step_name": "valid-events",
+      "step_id": "streamforge.valid-events",
+      "inp_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "up",
+          "port_id": "streamforge.valid-events.up",
+          "from_port_ids": [
+            "streamforge.parse-event.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.parse-event.flat_map_batch.down"
+          ]
+        }
+      ],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.valid-events.down",
+          "from_port_ids": [
+            "streamforge.valid-events.flat_map.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.valid-events.flat_map.flat_map_batch.down"
+          ]
+        }
+      ],
+      "substeps": [
+        {
+          "typ": "RenderedOperator",
+          "op_type": "flat_map",
+          "step_name": "flat_map",
+          "step_id": "streamforge.valid-events.flat_map",
+          "inp_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "up",
+              "port_id": "streamforge.valid-events.flat_map.up",
+              "from_port_ids": [
+                "streamforge.valid-events.up"
+              ],
+              "from_stream_ids": [
+                "streamforge.parse-event.flat_map_batch.down"
+              ]
+            }
+          ],
+          "out_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "down",
+              "port_id": "streamforge.valid-events.flat_map.down",
+              "from_port_ids": [
+                "streamforge.valid-events.flat_map.flat_map_batch.down"
+              ],
+              "from_stream_ids": [
+                "streamforge.valid-events.flat_map.flat_map_batch.down"
+              ]
+            }
+          ],
+          "substeps": [
+            {
+              "typ": "RenderedOperator",
+              "op_type": "flat_map_batch",
+              "step_name": "flat_map_batch",
+              "step_id": "streamforge.valid-events.flat_map.flat_map_batch",
+              "inp_ports": [
+                {
+                  "typ": "RenderedPort",
+                  "port_name": "up",
+                  "port_id": "streamforge.valid-events.flat_map.flat_map_batch.up",
+                  "from_port_ids": [
+                    "streamforge.valid-events.flat_map.up"
+                  ],
+                  "from_stream_ids": [
+                    "streamforge.parse-event.flat_map_batch.down"
+                  ]
+                }
+              ],
+              "out_ports": [
+                {
+                  "typ": "RenderedPort",
+                  "port_name": "down",
+                  "port_id": "streamforge.valid-events.flat_map.flat_map_batch.down",
+                  "from_port_ids": [],
+                  "from_stream_ids": []
+                }
+              ],
+              "substeps": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "typ": "RenderedOperator",
+      "op_type": "key_on",
+      "step_name": "truck-key",
+      "step_id": "streamforge.truck-key",
+      "inp_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "up",
+          "port_id": "streamforge.truck-key.up",
+          "from_port_ids": [
+            "streamforge.valid-events.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.valid-events.flat_map.flat_map_batch.down"
+          ]
+        }
+      ],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.truck-key.down",
+          "from_port_ids": [
+            "streamforge.truck-key.map.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.truck-key.map.flat_map_batch.down"
+          ]
+        }
+      ],
+      "substeps": [
+        {
+          "typ": "RenderedOperator",
+          "op_type": "map",
+          "step_name": "map",
+          "step_id": "streamforge.truck-key.map",
+          "inp_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "up",
+              "port_id": "streamforge.truck-key.map.up",
+              "from_port_ids": [
+                "streamforge.truck-key.up"
+              ],
+              "from_stream_ids": [
+                "streamforge.valid-events.flat_map.flat_map_batch.down"
+              ]
+            }
+          ],
+          "out_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "down",
+              "port_id": "streamforge.truck-key.map.down",
+              "from_port_ids": [
+                "streamforge.truck-key.map.flat_map_batch.down"
+              ],
+              "from_stream_ids": [
+                "streamforge.truck-key.map.flat_map_batch.down"
+              ]
+            }
+          ],
+          "substeps": [
+            {
+              "typ": "RenderedOperator",
+              "op_type": "flat_map_batch",
+              "step_name": "flat_map_batch",
+              "step_id": "streamforge.truck-key.map.flat_map_batch",
+              "inp_ports": [
+                {
+                  "typ": "RenderedPort",
+                  "port_name": "up",
+                  "port_id": "streamforge.truck-key.map.flat_map_batch.up",
+                  "from_port_ids": [
+                    "streamforge.truck-key.map.up"
+                  ],
+                  "from_stream_ids": [
+                    "streamforge.valid-events.flat_map.flat_map_batch.down"
+                  ]
+                }
+              ],
+              "out_ports": [
+                {
+                  "typ": "RenderedPort",
+                  "port_name": "down",
+                  "port_id": "streamforge.truck-key.map.flat_map_batch.down",
+                  "from_port_ids": [],
+                  "from_stream_ids": []
+                }
+              ],
+              "substeps": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "typ": "RenderedOperator",
+      "op_type": "stateful_map",
+      "step_name": "truck-temperature-state",
+      "step_id": "streamforge.truck-temperature-state",
+      "inp_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "up",
+          "port_id": "streamforge.truck-temperature-state.up",
+          "from_port_ids": [
+            "streamforge.truck-key.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.truck-key.map.flat_map_batch.down"
+          ]
+        }
+      ],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.truck-temperature-state.down",
+          "from_port_ids": [
+            "streamforge.truck-temperature-state.stateful_flat_map.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down"
+          ]
+        }
+      ],
+      "substeps": [
+        {
+          "typ": "RenderedOperator",
+          "op_type": "stateful_flat_map",
+          "step_name": "stateful_flat_map",
+          "step_id": "streamforge.truck-temperature-state.stateful_flat_map",
+          "inp_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "up",
+              "port_id": "streamforge.truck-temperature-state.stateful_flat_map.up",
+              "from_port_ids": [
+                "streamforge.truck-temperature-state.up"
+              ],
+              "from_stream_ids": [
+                "streamforge.truck-key.map.flat_map_batch.down"
+              ]
+            }
+          ],
+          "out_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "down",
+              "port_id": "streamforge.truck-temperature-state.stateful_flat_map.down",
+              "from_port_ids": [
+                "streamforge.truck-temperature-state.stateful_flat_map.stateful.down"
+              ],
+              "from_stream_ids": [
+                "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down"
+              ]
+            }
+          ],
+          "substeps": [
+            {
+              "typ": "RenderedOperator",
+              "op_type": "stateful",
+              "step_name": "stateful",
+              "step_id": "streamforge.truck-temperature-state.stateful_flat_map.stateful",
+              "inp_ports": [
+                {
+                  "typ": "RenderedPort",
+                  "port_name": "up",
+                  "port_id": "streamforge.truck-temperature-state.stateful_flat_map.stateful.up",
+                  "from_port_ids": [
+                    "streamforge.truck-temperature-state.stateful_flat_map.up"
+                  ],
+                  "from_stream_ids": [
+                    "streamforge.truck-key.map.flat_map_batch.down"
+                  ]
+                }
+              ],
+              "out_ports": [
+                {
+                  "typ": "RenderedPort",
+                  "port_name": "down",
+                  "port_id": "streamforge.truck-temperature-state.stateful_flat_map.stateful.down",
+                  "from_port_ids": [
+                    "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down"
+                  ],
+                  "from_stream_ids": [
+                    "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down"
+                  ]
+                }
+              ],
+              "substeps": [
+                {
+                  "typ": "RenderedOperator",
+                  "op_type": "stateful_batch",
+                  "step_name": "stateful_batch",
+                  "step_id": "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch",
+                  "inp_ports": [
+                    {
+                      "typ": "RenderedPort",
+                      "port_name": "up",
+                      "port_id": "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.up",
+                      "from_port_ids": [
+                        "streamforge.truck-temperature-state.stateful_flat_map.stateful.up"
+                      ],
+                      "from_stream_ids": [
+                        "streamforge.truck-key.map.flat_map_batch.down"
+                      ]
+                    }
+                  ],
+                  "out_ports": [
+                    {
+                      "typ": "RenderedPort",
+                      "port_name": "down",
+                      "port_id": "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down",
+                      "from_port_ids": [],
+                      "from_stream_ids": []
+                    }
+                  ],
+                  "substeps": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "typ": "RenderedOperator",
+      "op_type": "map",
+      "step_name": "state-result",
+      "step_id": "streamforge.state-result",
+      "inp_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "up",
+          "port_id": "streamforge.state-result.up",
+          "from_port_ids": [
+            "streamforge.truck-temperature-state.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down"
+          ]
+        }
+      ],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.state-result.down",
+          "from_port_ids": [
+            "streamforge.state-result.flat_map_batch.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.state-result.flat_map_batch.down"
+          ]
+        }
+      ],
+      "substeps": [
+        {
+          "typ": "RenderedOperator",
+          "op_type": "flat_map_batch",
+          "step_name": "flat_map_batch",
+          "step_id": "streamforge.state-result.flat_map_batch",
+          "inp_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "up",
+              "port_id": "streamforge.state-result.flat_map_batch.up",
+              "from_port_ids": [
+                "streamforge.state-result.up"
+              ],
+              "from_stream_ids": [
+                "streamforge.truck-temperature-state.stateful_flat_map.stateful.stateful_batch.down"
+              ]
+            }
+          ],
+          "out_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "down",
+              "port_id": "streamforge.state-result.flat_map_batch.down",
+              "from_port_ids": [],
+              "from_stream_ids": []
+            }
+          ],
+          "substeps": []
+        }
+      ]
+    },
+    {
+      "typ": "RenderedOperator",
+      "op_type": "inspect",
+      "step_name": "print-state",
+      "step_id": "streamforge.print-state",
+      "inp_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "up",
+          "port_id": "streamforge.print-state.up",
+          "from_port_ids": [
+            "streamforge.state-result.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.state-result.flat_map_batch.down"
+          ]
+        }
+      ],
+      "out_ports": [
+        {
+          "typ": "RenderedPort",
+          "port_name": "down",
+          "port_id": "streamforge.print-state.down",
+          "from_port_ids": [
+            "streamforge.print-state.inspect_debug.down"
+          ],
+          "from_stream_ids": [
+            "streamforge.print-state.inspect_debug.down"
+          ]
+        }
+      ],
+      "substeps": [
+        {
+          "typ": "RenderedOperator",
+          "op_type": "inspect_debug",
+          "step_name": "inspect_debug",
+          "step_id": "streamforge.print-state.inspect_debug",
+          "inp_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "up",
+              "port_id": "streamforge.print-state.inspect_debug.up",
+              "from_port_ids": [
+                "streamforge.print-state.up"
+              ],
+              "from_stream_ids": [
+                "streamforge.state-result.flat_map_batch.down"
+              ]
+            }
+          ],
+          "out_ports": [
+            {
+              "typ": "RenderedPort",
+              "port_name": "down",
+              "port_id": "streamforge.print-state.inspect_debug.down",
+              "from_port_ids": [],
+              "from_stream_ids": []
+            }
+          ],
+          "substeps": []
+        }
+      ]
+    }
+  ]
+}

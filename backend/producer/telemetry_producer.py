@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from confluent_kafka import Producer, KafkaException
 
-from config import (
+from .config import (
     KAFKA_BOOTSTRAP_SERVERS,
     KAFKA_TOPIC,
     TRUCK_COUNT,
@@ -37,11 +37,7 @@ def delivery_report(err, message):
 
     if err is not None:
         stats.failed += 1
-
-        print(
-            f"Delivery failed | "
-            f"error={err}"
-        )
+        print(f"Delivery failed | error={err}")
         return
 
     stats.delivered += 1
@@ -60,21 +56,11 @@ def generate_telemetry(truck_id):
     return {
         "truck_id": truck_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "latitude": round(
-            random.uniform(12.5, 19.5), 6
-        ),
-        "longitude": round(
-            random.uniform(72.5, 80.5), 6
-        ),
-        "speed_kmph": round(
-            random.uniform(20, 90), 2
-        ),
-        "temperature": round(
-            random.uniform(20, 40), 2
-        ),
-        "fuel_level": round(
-            random.uniform(10, 100), 2
-        ),
+        "latitude": round(random.uniform(12.5, 19.5), 6),
+        "longitude": round(random.uniform(72.5, 80.5), 6),
+        "speed_kmph": round(random.uniform(20, 90), 2),
+        "temperature": round(random.uniform(20, 40), 2),
+        "fuel_level": round(random.uniform(10, 100), 2),
     }
 
 
@@ -104,24 +90,19 @@ def run():
 
     try:
         while True:
-
             events_sent = 0
 
             for truck_number in range(1, TRUCK_COUNT + 1):
 
                 truck_id = f"TRUCK-{truck_number:05d}"
 
-                telemetry = generate_telemetry(
-                    truck_id
-                )
+                telemetry = generate_telemetry(truck_id)
 
                 try:
                     producer.produce(
                         topic=KAFKA_TOPIC,
                         key=truck_id.encode("utf-8"),
-                        value=json.dumps(
-                            telemetry
-                        ).encode("utf-8"),
+                        value=json.dumps(telemetry).encode("utf-8"),
                         callback=delivery_report,
                     )
 
@@ -152,22 +133,16 @@ def run():
             time.sleep(SEND_INTERVAL_SECONDS)
 
     except KeyboardInterrupt:
-
-        print(
-            "\nStopping StreamForge producer..."
-        )
+        print("\nStopping StreamForge producer...")
 
     except KafkaException as error:
-
-        print(
-            f"\nKafka error: {error}"
-        )
+        print(f"\nKafka error: {error}")
 
     finally:
-
         producer.flush()
 
         print("Producer stopped.")
+
         stats.print_summary()
 
 
